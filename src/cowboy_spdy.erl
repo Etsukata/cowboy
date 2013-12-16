@@ -70,7 +70,8 @@
 -type opts() :: [{env, cowboy_middleware:env()}
 	| {middlewares, [module()]}
 	| {onrequest, cowboy:onrequest_fun()}
-	| {onresponse, cowboy:onresponse_fun()}].
+	| {onresponse, cowboy:onresponse_fun()}
+	| {max_concurrent_streams, non_neg_integer()}].
 -export_type([opts/0]).
 
 %% API.
@@ -104,6 +105,9 @@ init(Parent, Ref, Socket, Transport, Opts) ->
 	Zdef = cow_spdy:deflate_init(),
 	Zinf = cow_spdy:inflate_init(),
 	ok = ranch:accept_ack(Ref),
+	MaxConcurrentStreams = get_value(max_concurrent_streams, Opts, 100),
+	settings(#state{socket=Socket, transport=Transport}, false, {settings,[
+		{max_concurrent_streams, MaxConcurrentStreams}]}),
 	loop(#state{parent=Parent, socket=Socket, transport=Transport,
 		middlewares=Middlewares, env=Env, onrequest=OnRequest,
 		onresponse=OnResponse, peer=Peer, zdef=Zdef, zinf=Zinf}).
@@ -309,6 +313,9 @@ syn_reply(#state{socket=Socket, transport=Transport, zdef=Zdef},
 
 rst_stream(#state{socket=Socket, transport=Transport}, StreamID, Status) ->
 	Transport:send(Socket, cow_spdy:rst_stream(StreamID, Status)).
+
+settings(#state{socket=Socket, transport=Transport}, IsClearSettings, Settings) ->
+	Transport:send(Socket, cow_spdy:settings(IsClearSettings, Settings)).
 
 goaway(#state{socket=Socket, transport=Transport, last_streamid=LastStreamID},
 		Status) ->
